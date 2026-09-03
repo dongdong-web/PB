@@ -3,7 +3,7 @@
   'use strict';
 
   const STORAGE_KEY = 'pb-race-data';
-  const DATA_VERSION = 1;
+  const DATA_VERSION = 2;
   const HISTORY_LIMIT = 8;
 
   const el = {
@@ -69,7 +69,9 @@
         standard: typeof raw.standard === 'string' ? raw.standard.trim().slice(0, 280) : '',
         createdAt: isFiniteTimestamp(raw.createdAt) ? raw.createdAt : Date.now(),
         updatedAt: isFiniteTimestamp(raw.updatedAt) ? raw.updatedAt : Date.now(),
-        records
+        records,
+        // v1 data has no counter: its full history is the source of truth for migration.
+        completedCount: Math.max(records.length, Number.isFinite(raw.completedCount) ? Math.max(0, Math.floor(raw.completedCount)) : 0)
       });
       return items;
     }, []);
@@ -181,7 +183,11 @@
       el.challengeList.append(empty);
       return;
     }
-    state.challenges.forEach((challenge) => {
+    // Frequent challenges float to the top without adding another visual metric to the product.
+    const challengesByUse = [...state.challenges].sort((a, b) =>
+      b.completedCount - a.completedCount || b.updatedAt - a.updatedAt
+    );
+    challengesByUse.forEach((challenge) => {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'challenge-card';
@@ -308,6 +314,7 @@
     const previousPb = pbRecord(challenge);
     const record = { id: makeId(), durationMs, completedAt: Date.now() };
     challenge.records.push(record);
+    challenge.completedCount += 1;
     challenge.updatedAt = Date.now();
     state.activeTimer = null;
     saveState();
@@ -388,7 +395,7 @@
       } else {
         const newChallenge = {
           id: makeId(), name: name.slice(0, 80), emoji: emojiInput.value.trim().slice(0, 12),
-          standard: standardInput.value.trim().slice(0, 280), createdAt: Date.now(), updatedAt: Date.now(), records: []
+          standard: standardInput.value.trim().slice(0, 280), createdAt: Date.now(), updatedAt: Date.now(), records: [], completedCount: 0
         };
         state.challenges.unshift(newChallenge);
         currentChallengeId = newChallenge.id;
