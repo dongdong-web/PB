@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f5" />
+    <title>PB · 和昨天的自己比赛</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar" aria-label="主导航">
+        <button class="brand" id="homeButton" type="button" aria-label="返回首页">
+          <span>PB</span>
+          <small>和昨天的自己比赛</small>
+        </button>
+        <button class="icon-button" id="settingsButton" type="button" aria-label="打开设置" title="设置">
+          <span aria-hidden="true">⚙</span>
+        </button>
+      </header>
+
+      <section id="homeView" class="view" aria-labelledby="homeTitle">
+        <div class="page-heading">
+          <p class="eyebrow">今天，就比昨天快一点</p>
+          <h1 id="homeTitle">今天挑战什么？</h1>
+        </div>
+        <div id="challengeList" class="challenge-list" aria-live="polite"></div>
+        <button id="createChallengeButton" class="create-button" type="button">
+          <span aria-hidden="true">＋</span> 创建新挑战
+        </button>
+        <button id="privacyButton" class="privacy-link" type="button">🔒 数据仅保存在你的设备</button>
+      </section>
+
+      <section id="timerView" class="view is-hidden" aria-live="polite">
+        <button id="backButton" class="back-button" type="button">← 全部挑战</button>
+        <div class="timer-header">
+          <span id="timerEmoji" class="timer-emoji" aria-hidden="true"></span>
+          <h1 id="timerTitle"></h1>
+          <button id="editChallengeButton" class="text-button" type="button">编辑</button>
+        </div>
+
+        <div id="standardBlock" class="standard-block is-hidden">
+          <span>完成标准</span>
+          <p id="standardText"></p>
+        </div>
+
+        <div class="scoreboard" aria-label="历史成绩">
+          <div>
+            <span class="score-label"><span aria-hidden="true">🏆</span> PB</span>
+            <strong id="pbTime">—</strong>
+          </div>
+          <div>
+            <span class="score-label"><span aria-hidden="true">⚡</span> LAST</span>
+            <strong id="lastTime">—</strong>
+          </div>
+        </div>
+
+        <div class="timer-stage">
+          <p id="timerStatus" class="timer-status">准备好就开始</p>
+          <output id="timerDisplay" class="timer-display" aria-live="off">00:00.0</output>
+        </div>
+
+        <button id="timerActionButton" class="timer-action" type="button">开始挑战</button>
+        <p id="timerHint" class="timer-hint">用真实完成时间，和过去的自己公平比赛。</p>
+
+        <section class="history-section" aria-labelledby="historyTitle">
+          <h2 id="historyTitle">最近挑战</h2>
+          <ol id="historyList" class="history-list"></ol>
+        </section>
+      </section>
+    </main>
+
+    <div id="modalRoot" class="modal-root is-hidden" aria-live="polite"></div>
+    <input id="importInput" type="file" accept="application/json,.json" hidden />
+    <script src="app.js"></script>
+  </body>
+</html>
