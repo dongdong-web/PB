@@ -126,6 +126,7 @@ h1 { margin-bottom: 0; letter-spacing: -0.045em; font-size: clamp(2rem, 7vw, 2.8
 .timer-status { min-height: 20px; margin-bottom: 11px; color: var(--muted); font-size: 0.87rem; font-weight: 650; }
 .timer-status.is-running { color: var(--accent-dark); }
 .timer-display { display: block; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; letter-spacing: -0.075em; font-size: clamp(4rem, 19vw, 8rem); font-weight: 780; line-height: 0.88; white-space: nowrap; }
+.timer-display.is-count-mode { letter-spacing: -0.055em; }
 
 .timer-action { width: 100%; border: 0; border-radius: 16px; padding: 18px; color: #fff; background: var(--ink); box-shadow: 0 8px 18px rgba(23, 23, 22, 0.15); font-weight: 800; font-size: 1.06rem; transition: transform 150ms ease, background 150ms ease; }
 .timer-action:hover { transform: translateY(-1px); background: #33332f; }
@@ -152,6 +153,18 @@ h1 { margin-bottom: 0; letter-spacing: -0.045em; font-size: clamp(2rem, 7vw, 2.8
 .field input, .field textarea { width: 100%; border: 1px solid #d9d9d4; border-radius: 11px; padding: 12px; color: var(--ink); background: #fff; }
 .field input:focus, .field textarea:focus { border-color: var(--accent); outline: 0; }
 .field textarea { min-height: 82px; resize: vertical; }
+.scoring-field { min-width: 0; margin: 18px 0; border: 0; padding: 0; }
+.scoring-field legend { margin-bottom: 8px; padding: 0; font-size: 0.85rem; font-weight: 720; }
+.scoring-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scoring-option { position: relative; min-width: 0; cursor: pointer; }
+.scoring-option input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.scoring-option span { display: grid; min-height: 65px; place-content: center; gap: 3px; border: 1px solid #d9d9d4; border-radius: 11px; padding: 9px 5px; background: #fff; text-align: center; transition: border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.scoring-option strong { font-size: 0.9rem; }
+.scoring-option small { color: var(--muted); font-size: 0.72rem; }
+.scoring-option input:checked + span { border-color: var(--accent); color: var(--accent-dark); background: #fff7f3; box-shadow: inset 0 0 0 1px var(--accent); }
+.scoring-option input:focus-visible + span { outline: 3px solid rgba(239, 93, 63, 0.35); outline-offset: 2px; }
+.scoring-option input:disabled + span { cursor: default; opacity: 0.68; }
+.field-note { margin: 8px 0 0; color: var(--muted); font-size: 0.76rem; line-height: 1.45; }
 .form-error { min-height: 20px; margin: 5px 0 0; color: #ba321d; font-size: 0.83rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .button-secondary, .button-primary, .button-danger { border: 0; border-radius: 11px; padding: 11px 15px; font-weight: 740; }
