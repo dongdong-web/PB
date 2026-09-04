@@ -3,7 +3,7 @@
   'use strict';
 
   const STORAGE_KEY = 'pb-race-data';
-  const DATA_VERSION = 2;
+  const DATA_VERSION = 3;
   const HISTORY_LIMIT = 8;
 
   const el = {
@@ -44,11 +44,22 @@
     return Number.isFinite(value) && value > 0;
   }
 
+  function normalizeScoring(scoring) {
+    if (scoring && scoring.type === 'number') {
+      return { type: 'number', direction: 'higher', unit: '次' };
+    }
+    if (scoring && scoring.type === 'duration' && scoring.direction === 'higher') {
+      return { type: 'duration', direction: 'higher', unit: 'ms' };
+    }
+    return { type: 'duration', direction: 'lower', unit: 'ms' };
+  }
+
   function normalizeRecord(record) {
-    if (!record || typeof record !== 'object' || !Number.isFinite(record.durationMs) || record.durationMs < 0 || !isFiniteTimestamp(record.completedAt)) return null;
+    const value = record && Number.isFinite(record.value) ? record.value : record && record.durationMs;
+    if (!record || typeof record !== 'object' || !Number.isFinite(value) || value < 0 || !isFiniteTimestamp(record.completedAt)) return null;
     return {
       id: typeof record.id === 'string' ? record.id : makeId(),
-      durationMs: Math.round(record.durationMs),
+      value: Math.round(value),
       completedAt: Math.round(record.completedAt)
     };
   }
@@ -61,6 +72,7 @@
       if (!raw || typeof raw !== 'object' || typeof raw.name !== 'string' || !raw.name.trim()) return items;
       const id = typeof raw.id === 'string' && raw.id && !ids.has(raw.id) ? raw.id : makeId();
       ids.add(id);
+      const scoring = normalizeScoring(raw.scoring);
       const records = Array.isArray(raw.records) ? raw.records.map(normalizeRecord).filter(Boolean).sort((a, b) => a.completedAt - b.completedAt) : [];
       items.push({
         id,
@@ -69,14 +81,15 @@
         standard: typeof raw.standard === 'string' ? raw.standard.trim().slice(0, 280) : '',
         createdAt: isFiniteTimestamp(raw.createdAt) ? raw.createdAt : Date.now(),
         updatedAt: isFiniteTimestamp(raw.updatedAt) ? raw.updatedAt : Date.now(),
+        scoring,
         records,
-        // v1 data has no counter: its full history is the source of truth for migration.
+        // Legacy data has no counter: its full history is the source of truth for migration.
         completedCount: Math.max(records.length, Number.isFinite(raw.completedCount) ? Math.max(0, Math.floor(raw.completedCount)) : 0)
       });
       return items;
     }, []);
     const active = candidate.activeTimer;
-    const activeTimer = active && typeof active.challengeId === 'string' && challenges.some((c) => c.id === active.challengeId) && isFiniteTimestamp(active.startedAt)
+    const activeTimer = active && typeof active.challengeId === 'string' && challenges.some((c) => c.id === active.challengeId && c.scoring.type === 'duration') && isFiniteTimestamp(active.startedAt)
       ? { challengeId: active.challengeId, startedAt: active.startedAt }
       : null;
     return { version: DATA_VERSION, challenges, activeTimer };
@@ -111,7 +124,16 @@
   }
 
   function pbRecord(challenge) {
-    return challenge.records.reduce((best, record) => (!best || record.durationMs < best.durationMs ? record : best), null);
+    return challenge.records.reduce((best, record) => (!best || isBetterScore(record.value, best.value, challenge) ? record : best), null);
+  }
+
+  function isBetterScore(candidate, reference, challenge) {
+    return challenge.scoring.direction === 'higher' ? candidate > reference : candidate < reference;
+  }
+
+  function scoringMode(challenge) {
+    if (challenge.scoring.type === 'number') return 'more';
+    return challenge.scoring.direction === 'higher' ? 'longer' : 'faster';
   }
 
   function formatTime(milliseconds, withTenths) {
@@ -136,6 +158,26 @@
     const minutes = Math.floor(seconds / 60);
     const remainder = seconds % 60;
     return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分`;
+  }
+
+  function formatScore(value, challenge, withTenths) {
+    return challenge.scoring.type === 'number' ? `${Math.round(value)} 次` : formatTime(value, withTenths);
+  }
+
+  function formatScoreDifference(value, challenge) {
+    return challenge.scoring.type === 'number' ? `${Math.round(Math.abs(value))} 次` : formatDifference(Math.abs(value));
+  }
+
+  function improvementCopy(prefix, difference, challenge) {
+    if (challenge.scoring.type === 'number') return `${prefix}多 ${formatScoreDifference(difference, challenge)}`;
+    if (challenge.scoring.direction === 'higher') return `${prefix}多坚持 ${formatScoreDifference(difference, challenge)}`;
+    return `${prefix}快 ${formatScoreDifference(difference, challenge)}`;
+  }
+
+  function setbackCopy(prefix, difference, challenge) {
+    if (challenge.scoring.type === 'number') return `${prefix}少 ${formatScoreDifference(difference, challenge)}`;
+    if (challenge.scoring.direction === 'higher') return `${prefix}少坚持 ${formatScoreDifference(difference, challenge)}`;
+    return `${prefix}慢 ${formatScoreDifference(difference, challenge)}`;
   }
 
   function formatDate(timestamp) {
@@ -208,12 +250,12 @@
       const pbText = document.createElement('span');
       pbText.innerHTML = '🏆 PB ';
       const pbValue = document.createElement('b');
-      pbValue.textContent = pb ? formatTime(pb.durationMs, false) : '—';
+      pbValue.textContent = pb ? formatScore(pb.value, challenge, false) : '—';
       pbText.append(pbValue);
       const lastText = document.createElement('span');
       lastText.innerHTML = '⚡ 上次 ';
       const lastValue = document.createElement('b');
-      lastValue.textContent = last ? formatTime(last.durationMs, false) : '—';
+      lastValue.textContent = last ? formatScore(last.value, challenge, false) : '—';
       lastText.append(lastValue);
       scores.append(pbText, lastText);
       details.append(name, scores);
@@ -234,15 +276,22 @@
     const last = lastRecord(challenge);
     setText(el.timerEmoji, challenge.emoji || '⏱️');
     setText(el.timerTitle, challenge.name);
-    setText(el.pbTime, pb ? formatTime(pb.durationMs, false) : '—');
-    setText(el.lastTime, last ? formatTime(last.durationMs, false) : '—');
+    setText(el.pbTime, pb ? formatScore(pb.value, challenge, false) : '—');
+    setText(el.lastTime, last ? formatScore(last.value, challenge, false) : '—');
     setText(el.standardText, challenge.standard);
     el.standardBlock.classList.toggle('is-hidden', !challenge.standard);
-    setText(el.timerStatus, isRunning ? '挑战进行中' : '准备好就开始');
+    const isCountMode = challenge.scoring.type === 'number';
+    const isEnduranceMode = scoringMode(challenge) === 'longer';
+    setText(el.timerStatus, isCountMode ? '完成后记录总次数' : isRunning ? '挑战进行中' : isEnduranceMode ? '坚持越久，成绩越好' : '准备好就开始');
     el.timerStatus.classList.toggle('is-running', isRunning);
-    setText(el.timerActionButton, isRunning ? '🏁 完成挑战' : '开始挑战');
+    setText(el.timerActionButton, isCountMode ? '记录本次成绩' : isRunning ? '🏁 完成挑战' : '开始挑战');
     el.timerActionButton.classList.toggle('is-finishing', isRunning);
-    setText(el.timerHint, isRunning ? '确认已达到你的完成标准，再记录本次成绩。' : '用真实完成时间，和过去的自己公平比赛。');
+    el.timerDisplay.classList.toggle('is-count-mode', isCountMode);
+    setText(el.timerHint, isCountMode
+      ? '例如完成 3 组俯卧撑，记录 3 组的总次数。'
+      : isRunning ? '确认已达到你的完成标准，再记录本次成绩。' : isEnduranceMode
+        ? '保持动作标准，结束时记录真实坚持时长。'
+        : '用真实完成时间，和过去的自己公平比赛。');
     updateClock();
     renderHistory(challenge);
   }
@@ -264,7 +313,7 @@
       date.dateTime = new Date(record.completedAt).toISOString();
       date.textContent = formatDate(record.completedAt);
       const time = document.createElement('strong');
-      time.textContent = formatTime(record.durationMs, false);
+      time.textContent = formatScore(record.value, challenge, false);
       const badge = document.createElement('span');
       badge.className = 'record-badge';
       badge.textContent = currentPb && record.id === currentPb.id ? '🏆 PB' : '';
@@ -278,6 +327,11 @@
   }
 
   function updateClock() {
+    const challenge = getChallenge(currentChallengeId);
+    if (challenge && challenge.scoring.type === 'number') {
+      setText(el.timerDisplay, '— 次');
+      return;
+    }
     const runningHere = state.activeTimer && state.activeTimer.challengeId === currentChallengeId;
     setText(el.timerDisplay, runningHere ? formatTime(elapsedMs(), true) : '00:00.0');
   }
@@ -296,6 +350,14 @@
   function toggleTimer() {
     const challenge = getChallenge(currentChallengeId);
     if (!challenge) return;
+    if (challenge.scoring.type === 'number') {
+      if (state.activeTimer) {
+        showTimer(state.activeTimer.challengeId);
+        return;
+      }
+      openNumberEntry(challenge);
+      return;
+    }
     if (state.activeTimer) {
       if (state.activeTimer.challengeId === challenge.id) finishTimer(challenge);
       else showTimer(state.activeTimer.challengeId);
@@ -310,17 +372,21 @@
   function finishTimer(challenge) {
     const durationMs = elapsedMs();
     // A real elapsed timestamp keeps accuracy intact across background tabs and refreshes.
+    completeChallenge(challenge, durationMs);
+  }
+
+  function completeChallenge(challenge, value) {
     const previousLast = lastRecord(challenge);
     const previousPb = pbRecord(challenge);
-    const record = { id: makeId(), durationMs, completedAt: Date.now() };
+    const record = { id: makeId(), value, completedAt: Date.now() };
     challenge.records.push(record);
     challenge.completedCount += 1;
     challenge.updatedAt = Date.now();
-    state.activeTimer = null;
+    if (state.activeTimer && state.activeTimer.challengeId === challenge.id) state.activeTimer = null;
     saveState();
     stopTicking();
     renderTimer();
-    openResult(record, previousLast, previousPb);
+    openResult(challenge, record, previousLast, previousPb);
   }
 
   function openModal(content, onClose) {
@@ -349,6 +415,99 @@
     return button;
   }
 
+  function scoringForMode(mode) {
+    if (mode === 'more') return { type: 'number', direction: 'higher', unit: '次' };
+    if (mode === 'longer') return { type: 'duration', direction: 'higher', unit: 'ms' };
+    return { type: 'duration', direction: 'lower', unit: 'ms' };
+  }
+
+  function scoringField(form, selectedMode, locked) {
+    const wrapper = document.createElement('fieldset');
+    wrapper.className = 'scoring-field';
+    const legend = document.createElement('legend');
+    legend.textContent = '比什么？';
+    const grid = document.createElement('div');
+    grid.className = 'scoring-options';
+    const options = [
+      { value: 'faster', title: '更快', copy: '时间越短' },
+      { value: 'longer', title: '更久', copy: '坚持越久' },
+      { value: 'more', title: '更多', copy: '次数越多' }
+    ];
+    const inputs = options.map((option) => {
+      const label = document.createElement('label');
+      label.className = 'scoring-option';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'scoring-mode';
+      input.value = option.value;
+      input.checked = option.value === selectedMode;
+      input.disabled = locked;
+      const card = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = option.title;
+      const copy = document.createElement('small');
+      copy.textContent = option.copy;
+      card.append(title, copy);
+      label.append(input, card);
+      grid.append(label);
+      return input;
+    });
+    wrapper.append(legend, grid);
+    if (locked) {
+      const note = document.createElement('p');
+      note.className = 'field-note';
+      note.textContent = '已有成绩或正在计时，计分方式不可更换。动作进阶请创建一个新挑战。';
+      wrapper.append(note);
+    }
+    form.append(wrapper);
+    return () => (inputs.find((input) => input.checked) || inputs[0]).value;
+  }
+
+  function openNumberEntry(challenge) {
+    const modal = document.createElement('section');
+    modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const heading = document.createElement('h2');
+    heading.textContent = '记录本次成绩';
+    const intro = document.createElement('p');
+    intro.className = 'modal-intro';
+    intro.textContent = challenge.standard || `${challenge.name}完成后，填写本次总次数。`;
+    const form = document.createElement('form');
+    form.noValidate = true;
+    const countInput = formField(form, '本次完成次数', 'count', '例如：45', '', true);
+    countInput.type = 'number';
+    countInput.inputMode = 'numeric';
+    countInput.min = '1';
+    countInput.max = '999999';
+    countInput.step = '1';
+    const error = document.createElement('p');
+    error.className = 'form-error';
+    error.setAttribute('role', 'alert');
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    const cancel = makeButton('取消', 'button-secondary');
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.className = 'button-primary';
+    submit.textContent = '保存成绩';
+    cancel.addEventListener('click', closeModal);
+    actions.append(cancel, submit);
+    form.append(error, actions);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const count = Number(countInput.value);
+      if (!Number.isInteger(count) || count < 1 || count > 999999) {
+        error.textContent = '请输入 1 到 999999 之间的整数。';
+        countInput.focus();
+        return;
+      }
+      completeChallenge(challenge, count);
+    });
+    modal.append(heading, intro, form);
+    openModal(modal);
+  }
+
   function openChallengeForm(challenge) {
     const isEditing = Boolean(challenge);
     const modal = document.createElement('section');
@@ -365,6 +524,8 @@
     const nameInput = formField(form, '挑战名称', 'name', '例如：擦地', challenge ? challenge.name : '', true);
     const emojiInput = formField(form, 'Emoji / 图标', 'emoji', '例如：🧹', challenge ? challenge.emoji : '', false);
     emojiInput.maxLength = 12;
+    const scoringLocked = Boolean(isEditing && (challenge.records.length || (state.activeTimer && state.activeTimer.challengeId === challenge.id)));
+    const getScoringMode = scoringField(form, challenge ? scoringMode(challenge) : 'faster', scoringLocked);
     const standardInput = formField(form, '完成标准', 'standard', '例如：客厅 + 两个卧室全部擦完', challenge ? challenge.standard : '', false, true);
     const error = document.createElement('p');
     error.className = 'form-error';
@@ -391,11 +552,13 @@
         challenge.name = name.slice(0, 80);
         challenge.emoji = emojiInput.value.trim().slice(0, 12);
         challenge.standard = standardInput.value.trim().slice(0, 280);
+        if (!scoringLocked) challenge.scoring = scoringForMode(getScoringMode());
         challenge.updatedAt = Date.now();
       } else {
         const newChallenge = {
           id: makeId(), name: name.slice(0, 80), emoji: emojiInput.value.trim().slice(0, 12),
-          standard: standardInput.value.trim().slice(0, 280), createdAt: Date.now(), updatedAt: Date.now(), records: [], completedCount: 0
+          standard: standardInput.value.trim().slice(0, 280), scoring: scoringForMode(getScoringMode()),
+          createdAt: Date.now(), updatedAt: Date.now(), records: [], completedCount: 0
         };
         state.challenges.unshift(newChallenge);
         currentChallengeId = newChallenge.id;
@@ -484,9 +647,11 @@
     openModal(modal);
   }
 
-  function openResult(record, previousLast, previousPb) {
-    const isNewPb = !previousPb || record.durationMs < previousPb.durationMs;
-    const beatLast = previousLast && record.durationMs < previousLast.durationMs;
+  function openResult(challenge, record, previousLast, previousPb) {
+    const isNewPb = !previousPb || isBetterScore(record.value, previousPb.value, challenge);
+    const beatLast = Boolean(previousLast && isBetterScore(record.value, previousLast.value, challenge));
+    const tiedLast = Boolean(previousLast && record.value === previousLast.value);
+    const tiedPb = Boolean(previousPb && record.value === previousPb.value);
     const modal = document.createElement('section');
     modal.className = `modal result-modal${isNewPb ? ' new-pb' : ''}`;
     modal.setAttribute('role', 'dialog');
@@ -498,18 +663,18 @@
     heading.textContent = isNewPb ? 'NEW PB！' : beatLast ? '击败上一次的自己！' : '本次挑战完成';
     const time = document.createElement('div');
     time.className = 'result-time';
-    time.textContent = formatTime(record.durationMs, true);
+    time.textContent = formatScore(record.value, challenge, true);
     const details = document.createElement('div');
     details.className = 'result-details';
     if (isNewPb) {
       const recordCopy = document.createElement('p');
       recordCopy.className = 'record-copy';
-      recordCopy.textContent = `新的个人纪录：${formatTime(record.durationMs, false)}`;
+      recordCopy.textContent = `新的个人纪录：${formatScore(record.value, challenge, false)}`;
       details.append(recordCopy);
       if (previousPb) {
         const improved = document.createElement('p');
         improved.className = 'positive';
-        improved.textContent = `比原纪录快 ${formatDifference(previousPb.durationMs - record.durationMs)}`;
+        improved.textContent = improvementCopy('比原纪录', record.value - previousPb.value, challenge);
         details.append(improved);
       } else {
         const first = document.createElement('p');
@@ -520,15 +685,20 @@
       if (beatLast) {
         const improved = document.createElement('p');
         improved.className = 'positive';
-        improved.textContent = `比上次快 ${formatDifference(previousLast.durationMs - record.durationMs)}`;
+        improved.textContent = improvementCopy('比上次', record.value - previousLast.value, challenge);
         details.append(improved);
+      } else if (tiedLast) {
+        const tied = document.createElement('p');
+        tied.textContent = '和上次成绩持平';
+        details.append(tied);
       } else if (previousLast) {
         const lastGap = document.createElement('p');
-        lastGap.textContent = `比上次慢 ${formatDifference(record.durationMs - previousLast.durationMs)}`;
+        lastGap.textContent = setbackCopy('比上次', record.value - previousLast.value, challenge);
         details.append(lastGap);
       }
       const gap = document.createElement('p');
-      gap.textContent = `距离 PB 还差 ${formatDifference(record.durationMs - previousPb.durationMs)}`;
+      gap.textContent = tiedPb ? '追平 PB！' : `距离 PB 还差 ${formatScoreDifference(record.value - previousPb.value, challenge)}`;
+      if (tiedPb) gap.className = 'record-copy';
       details.append(gap);
     }
     const done = makeButton('继续', 'button-primary');
