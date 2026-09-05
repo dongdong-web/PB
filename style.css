@@ -133,6 +133,7 @@ h1 { margin-bottom: 0; letter-spacing: -0.045em; font-size: clamp(2rem, 7vw, 2.8
 .timer-action.is-finishing { background: var(--accent); box-shadow: 0 8px 18px rgba(239, 93, 63, 0.2); }
 .timer-action.is-finishing:hover { background: var(--accent-dark); }
 .timer-hint { margin: 13px 0 0; color: var(--muted); font-size: 0.78rem; line-height: 1.45; text-align: center; }
+.wake-lock-status { margin: 9px 0 0; color: var(--gold); font-size: 0.76rem; font-weight: 720; text-align: center; }
 
 .history-section { margin-top: 48px; padding-top: 25px; border-top: 1px solid var(--line); }
 .history-section h2 { margin-bottom: 14px; font-size: 0.95rem; letter-spacing: -0.01em; }
