@@ -26,6 +26,7 @@
     timerDisplay: document.getElementById('timerDisplay'),
     timerActionButton: document.getElementById('timerActionButton'),
     timerHint: document.getElementById('timerHint'),
+    wakeLockStatus: document.getElementById('wakeLockStatus'),
     historyList: document.getElementById('historyList'),
     modalRoot: document.getElementById('modalRoot'),
     importInput: document.getElementById('importInput')
@@ -35,6 +36,8 @@
   let currentChallengeId = null;
   let tickHandle = null;
   let modalCloseHandler = null;
+  let wakeLockSentinel = null;
+  let wakeLockRequestPending = false;
 
   function freshState() {
     return { version: DATA_VERSION, challenges: [], activeTimer: null };
@@ -294,6 +297,7 @@
         : '用真实完成时间，和过去的自己公平比赛。');
     updateClock();
     renderHistory(challenge);
+    updateWakeLockStatus();
   }
 
   function renderHistory(challenge) {
@@ -340,11 +344,51 @@
     stopTicking();
     updateClock();
     tickHandle = window.setInterval(updateClock, 100);
+    requestScreenWakeLock();
   }
 
   function stopTicking() {
     if (tickHandle !== null) window.clearInterval(tickHandle);
     tickHandle = null;
+  }
+
+  function updateWakeLockStatus() {
+    const isActive = Boolean(state.activeTimer && state.activeTimer.challengeId === currentChallengeId && wakeLockSentinel && !wakeLockSentinel.released);
+    el.wakeLockStatus.classList.toggle('is-hidden', !isActive);
+  }
+
+  async function requestScreenWakeLock() {
+    const isSupported = 'wakeLock' in navigator && typeof navigator.wakeLock.request === 'function';
+    if (wakeLockSentinel && wakeLockSentinel.released) wakeLockSentinel = null;
+    if (!state.activeTimer || !isSupported || document.visibilityState !== 'visible' || wakeLockSentinel || wakeLockRequestPending) {
+      updateWakeLockStatus();
+      return;
+    }
+    wakeLockRequestPending = true;
+    try {
+      const sentinel = await navigator.wakeLock.request('screen');
+      if (!state.activeTimer || document.visibilityState !== 'visible') {
+        await sentinel.release();
+        return;
+      }
+      wakeLockSentinel = sentinel;
+      sentinel.addEventListener('release', () => {
+        if (wakeLockSentinel === sentinel) wakeLockSentinel = null;
+        updateWakeLockStatus();
+      });
+    } catch (_) {
+      wakeLockSentinel = null;
+    } finally {
+      wakeLockRequestPending = false;
+      updateWakeLockStatus();
+    }
+  }
+
+  function releaseScreenWakeLock() {
+    const sentinel = wakeLockSentinel;
+    wakeLockSentinel = null;
+    updateWakeLockStatus();
+    if (sentinel && !sentinel.released) sentinel.release().catch(() => {});
   }
 
   function toggleTimer() {
@@ -382,7 +426,10 @@
     challenge.records.push(record);
     challenge.completedCount += 1;
     challenge.updatedAt = Date.now();
-    if (state.activeTimer && state.activeTimer.challengeId === challenge.id) state.activeTimer = null;
+    if (state.activeTimer && state.activeTimer.challengeId === challenge.id) {
+      state.activeTimer = null;
+      releaseScreenWakeLock();
+    }
     saveState();
     stopTicking();
     renderTimer();
@@ -612,7 +659,10 @@
     cancel.addEventListener('click', closeModal);
     remove.addEventListener('click', () => {
       state.challenges = state.challenges.filter((item) => item.id !== challenge.id);
-      if (state.activeTimer && state.activeTimer.challengeId === challenge.id) state.activeTimer = null;
+      if (state.activeTimer && state.activeTimer.challengeId === challenge.id) {
+        state.activeTimer = null;
+        releaseScreenWakeLock();
+      }
       saveState();
       closeModal();
       showHome();
@@ -810,6 +860,7 @@
     const confirm = makeButton('确认导入', 'button-primary');
     cancel.addEventListener('click', closeModal);
     confirm.addEventListener('click', () => {
+      releaseScreenWakeLock();
       state = imported;
       saveState();
       closeModal();
@@ -832,6 +883,10 @@
     el.importInput.addEventListener('change', handleImport);
     el.modalRoot.addEventListener('click', (event) => { if (event.target === el.modalRoot) closeModal(); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !el.modalRoot.classList.contains('is-hidden')) closeModal(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && state.activeTimer) requestScreenWakeLock();
+      else updateWakeLockStatus();
+    });
   }
 
   bindEvents();
