@@ -92,6 +92,17 @@ h1 { margin-bottom: 0; letter-spacing: -0.045em; font-size: clamp(2rem, 7vw, 2.8
 .card-scores { display: flex; flex-wrap: wrap; gap: 7px 15px; color: var(--muted); font-size: 0.84rem; }
 .card-scores b { color: var(--ink); font-weight: 700; }
 .card-arrow { color: #b7b7b1; font-size: 1.3rem; }
+.card-arrow.is-quick-start {
+  min-width: 42px;
+  border-radius: 999px;
+  padding: 7px 9px;
+  color: var(--accent-dark);
+  background: #fff3ee;
+  font-size: 0.76rem;
+  font-weight: 780;
+  text-align: center;
+}
+.card-arrow.is-running { color: var(--accent-dark); font-size: 0.78rem; font-weight: 760; }
 
 .empty-state { border: 1px dashed #d4d4ce; border-radius: 18px; padding: 31px 20px; color: var(--muted); background: rgba(255,255,255,0.42); text-align: center; }
 .empty-state p { margin: 0 auto; max-width: 24ch; line-height: 1.55; }
@@ -132,6 +143,16 @@ h1 { margin-bottom: 0; letter-spacing: -0.045em; font-size: clamp(2rem, 7vw, 2.8
 .timer-action:hover { transform: translateY(-1px); background: #33332f; }
 .timer-action.is-finishing { background: var(--accent); box-shadow: 0 8px 18px rgba(239, 93, 63, 0.2); }
 .timer-action.is-finishing:hover { background: var(--accent-dark); }
+.cancel-timer {
+  display: block;
+  margin: 11px auto 0;
+  border: 0;
+  padding: 7px 10px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.78rem;
+}
+.cancel-timer:hover { color: var(--ink); }
 .timer-hint { margin: 13px 0 0; color: var(--muted); font-size: 0.78rem; line-height: 1.45; text-align: center; }
 .wake-lock-status { margin: 9px 0 0; color: var(--gold); font-size: 0.76rem; font-weight: 720; text-align: center; }
 

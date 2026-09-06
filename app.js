@@ -25,6 +25,7 @@
     timerStatus: document.getElementById('timerStatus'),
     timerDisplay: document.getElementById('timerDisplay'),
     timerActionButton: document.getElementById('timerActionButton'),
+    cancelTimerButton: document.getElementById('cancelTimerButton'),
     timerHint: document.getElementById('timerHint'),
     wakeLockStatus: document.getElementById('wakeLockStatus'),
     historyList: document.getElementById('historyList'),
@@ -217,6 +218,15 @@
     else stopTicking();
   }
 
+  function openChallengeFromHome(challenge) {
+    // One tap is the starting gun. Never replace a race that is already running.
+    if (challenge.scoring.type === 'duration' && !state.activeTimer) {
+      beginTimer(challenge);
+      return;
+    }
+    showTimer(challenge.id);
+  }
+
   function renderHome() {
     el.challengeList.replaceChildren();
     if (!state.challenges.length) {
@@ -236,8 +246,10 @@
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'challenge-card';
-      card.setAttribute('aria-label', `打开挑战：${challenge.name}`);
-      card.addEventListener('click', () => showTimer(challenge.id));
+      const isRunning = Boolean(state.activeTimer && state.activeTimer.challengeId === challenge.id);
+      const canQuickStart = challenge.scoring.type === 'duration' && !state.activeTimer;
+      card.setAttribute('aria-label', canQuickStart ? `立即开始挑战：${challenge.name}` : `打开挑战：${challenge.name}`);
+      card.addEventListener('click', () => openChallengeFromHome(challenge));
 
       const emoji = document.createElement('span');
       emoji.className = 'card-emoji';
@@ -265,7 +277,15 @@
       const arrow = document.createElement('span');
       arrow.className = 'card-arrow';
       arrow.setAttribute('aria-hidden', 'true');
-      arrow.textContent = state.activeTimer && state.activeTimer.challengeId === challenge.id ? '●' : '›';
+      if (isRunning) {
+        arrow.classList.add('is-running');
+        arrow.textContent = '进行中';
+      } else if (canQuickStart) {
+        arrow.classList.add('is-quick-start');
+        arrow.textContent = '开始';
+      } else {
+        arrow.textContent = '›';
+      }
       card.append(emoji, details, arrow);
       el.challengeList.append(card);
     });
@@ -289,6 +309,8 @@
     el.timerStatus.classList.toggle('is-running', isRunning);
     setText(el.timerActionButton, isCountMode ? '记录本次成绩' : isRunning ? '🏁 完成挑战' : '开始挑战');
     el.timerActionButton.classList.toggle('is-finishing', isRunning);
+    el.cancelTimerButton.classList.toggle('is-hidden', !isRunning);
+    if (isRunning) setText(el.cancelTimerButton, elapsedMs() < 10000 ? '↶ 撤销开始' : '取消本次计时');
     el.timerDisplay.classList.toggle('is-count-mode', isCountMode);
     setText(el.timerHint, isCountMode
       ? '例如完成 3 组俯卧撑，记录 3 组的总次数。'
@@ -338,6 +360,7 @@
     }
     const runningHere = state.activeTimer && state.activeTimer.challengeId === currentChallengeId;
     setText(el.timerDisplay, runningHere ? formatTime(elapsedMs(), true) : '00:00.0');
+    if (runningHere) setText(el.cancelTimerButton, elapsedMs() < 10000 ? '↶ 撤销开始' : '取消本次计时');
   }
 
   function startTicking() {
@@ -407,10 +430,24 @@
       else showTimer(state.activeTimer.challengeId);
       return;
     }
+    beginTimer(challenge);
+  }
+
+  function beginTimer(challenge) {
     state.activeTimer = { challengeId: challenge.id, startedAt: Date.now() };
     saveState();
+    showTimer(challenge.id);
+  }
+
+  function cancelTimer() {
+    if (!state.activeTimer || state.activeTimer.challengeId !== currentChallengeId) return;
+    if (elapsedMs() >= 10000 && !window.confirm('取消这次挑战计时？本次用时不会保存。')) return;
+    state.activeTimer = null;
+    saveState();
+    releaseScreenWakeLock();
+    stopTicking();
     renderTimer();
-    startTicking();
+    setText(el.timerStatus, '已取消，准备好再开始');
   }
 
   function finishTimer(challenge) {
@@ -880,6 +917,7 @@
     el.backButton.addEventListener('click', showHome);
     el.editChallengeButton.addEventListener('click', openEditMenu);
     el.timerActionButton.addEventListener('click', toggleTimer);
+    el.cancelTimerButton.addEventListener('click', cancelTimer);
     el.importInput.addEventListener('change', handleImport);
     el.modalRoot.addEventListener('click', (event) => { if (event.target === el.modalRoot) closeModal(); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !el.modalRoot.classList.contains('is-hidden')) closeModal(); });
