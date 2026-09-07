@@ -35,6 +35,7 @@
 
   let state = loadState();
   let currentChallengeId = null;
+  let expandedHistoryChallengeId = null;
   let tickHandle = null;
   let modalCloseHandler = null;
   let wakeLockSentinel = null;
@@ -202,6 +203,7 @@
   function showHome() {
     stopTicking();
     currentChallengeId = null;
+    expandedHistoryChallengeId = null;
     el.timerView.classList.add('is-hidden');
     el.homeView.classList.remove('is-hidden');
     renderHome();
@@ -210,6 +212,7 @@
   function showTimer(id) {
     const challenge = getChallenge(id);
     if (!challenge) return showHome();
+    if (currentChallengeId !== id) expandedHistoryChallengeId = null;
     currentChallengeId = id;
     el.homeView.classList.add('is-hidden');
     el.timerView.classList.remove('is-hidden');
@@ -324,7 +327,8 @@
 
   function renderHistory(challenge) {
     el.historyList.replaceChildren();
-    const records = challenge.records.slice(-HISTORY_LIMIT).reverse();
+    const isExpanded = expandedHistoryChallengeId === challenge.id;
+    const records = (isExpanded ? challenge.records : challenge.records.slice(-HISTORY_LIMIT)).slice().reverse();
     if (!records.length) {
       const noHistory = document.createElement('li');
       noHistory.className = 'history-empty';
@@ -343,9 +347,24 @@
       const badge = document.createElement('span');
       badge.className = 'record-badge';
       badge.textContent = currentPb && record.id === currentPb.id ? '🏆 PB' : '';
-      item.append(date, time, badge);
+      const remove = makeButton('删除', 'history-delete');
+      remove.setAttribute('aria-label', `删除${date.textContent}的成绩 ${time.textContent}`);
+      remove.addEventListener('click', () => openDeleteRecordConfirm(challenge.id, record.id));
+      item.append(date, time, badge, remove);
       el.historyList.append(item);
     });
+    if (challenge.records.length > HISTORY_LIMIT) {
+      const moreItem = document.createElement('li');
+      moreItem.className = 'history-more';
+      const more = makeButton(isExpanded ? '收起记录' : `查看全部 ${challenge.records.length} 条`, 'history-more-button');
+      more.setAttribute('aria-expanded', String(isExpanded));
+      more.addEventListener('click', () => {
+        expandedHistoryChallengeId = isExpanded ? null : challenge.id;
+        renderHistory(challenge);
+      });
+      moreItem.append(more);
+      el.historyList.append(moreItem);
+    }
   }
 
   function elapsedMs() {
@@ -471,6 +490,47 @@
     stopTicking();
     renderTimer();
     openResult(challenge, record, previousLast, previousPb);
+  }
+
+  function deleteRecord(challengeId, recordId) {
+    const challenge = getChallenge(challengeId);
+    if (!challenge) return false;
+    const recordIndex = challenge.records.findIndex((record) => record.id === recordId);
+    if (recordIndex < 0) return false;
+    challenge.records.splice(recordIndex, 1);
+    challenge.completedCount = Math.max(challenge.records.length, challenge.completedCount - 1);
+    challenge.updatedAt = Date.now();
+    saveState();
+    return true;
+  }
+
+  function openDeleteRecordConfirm(challengeId, recordId) {
+    const challenge = getChallenge(challengeId);
+    const record = challenge && challenge.records.find((item) => item.id === recordId);
+    if (!challenge || !record) return;
+    const modal = document.createElement('section');
+    modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const heading = document.createElement('h2');
+    heading.textContent = '删除这条成绩？';
+    const copy = document.createElement('p');
+    copy.className = 'modal-intro';
+    copy.textContent = `${formatDate(record.completedAt)}的 ${formatScore(record.value, challenge, false)} 将被删除。PB、上次成绩和常用排序会自动回滚。`;
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    const cancel = makeButton('保留成绩', 'button-secondary');
+    const remove = makeButton('确认删除', 'button-danger');
+    cancel.addEventListener('click', closeModal);
+    remove.addEventListener('click', () => {
+      if (!deleteRecord(challengeId, recordId)) return closeModal();
+      closeModal();
+      if (currentChallengeId === challengeId) renderTimer();
+      else renderHome();
+    });
+    actions.append(cancel, remove);
+    modal.append(heading, copy, actions);
+    openModal(modal);
   }
 
   function openModal(content, onClose) {
@@ -790,7 +850,9 @@
     }
     const done = makeButton('继续', 'button-primary');
     done.addEventListener('click', closeModal);
-    modal.append(symbol, heading, time, details, done);
+    const undo = makeButton('撤销本次成绩', 'result-undo');
+    undo.addEventListener('click', () => openDeleteRecordConfirm(challenge.id, record.id));
+    modal.append(symbol, heading, time, details, done, undo);
     openModal(modal);
   }
 
