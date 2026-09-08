@@ -198,6 +198,15 @@
       : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
   }
 
+  function formatClockTime(timestamp) {
+    const date = new Date(timestamp);
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function formatRecordDate(timestamp) {
+    return `${formatDate(timestamp)} ${formatClockTime(timestamp)}`;
+  }
+
   function setText(node, text) { node.textContent = text; }
 
   function showHome() {
@@ -341,7 +350,7 @@
       const item = document.createElement('li');
       const date = document.createElement('time');
       date.dateTime = new Date(record.completedAt).toISOString();
-      date.textContent = formatDate(record.completedAt);
+      date.textContent = formatRecordDate(record.completedAt);
       const time = document.createElement('strong');
       time.textContent = formatScore(record.value, challenge, false);
       const badge = document.createElement('span');
@@ -516,7 +525,7 @@
     heading.textContent = '删除这条成绩？';
     const copy = document.createElement('p');
     copy.className = 'modal-intro';
-    copy.textContent = `${formatDate(record.completedAt)}的 ${formatScore(record.value, challenge, false)} 将被删除。PB、上次成绩和常用排序会自动回滚。`;
+    copy.textContent = `${formatRecordDate(record.completedAt)} 的 ${formatScore(record.value, challenge, false)} 将被删除。PB、上次成绩和常用排序会自动回滚。`;
     const actions = document.createElement('div');
     actions.className = 'modal-actions';
     const cancel = makeButton('保留成绩', 'button-secondary');
@@ -813,6 +822,11 @@
     time.textContent = formatScore(record.value, challenge, true);
     const details = document.createElement('div');
     details.className = 'result-details';
+    const completedAt = document.createElement('time');
+    completedAt.className = 'result-completed-at';
+    completedAt.dateTime = new Date(record.completedAt).toISOString();
+    completedAt.textContent = `完成于 ${formatClockTime(record.completedAt)}`;
+    details.append(completedAt);
     if (isNewPb) {
       const recordCopy = document.createElement('p');
       recordCopy.className = 'record-copy';

@@ -224,6 +224,7 @@ h1 { margin-bottom: 0; letter-spacing: -0.045em; font-size: clamp(2rem, 7vw, 2.8
 .result-time { margin: 17px 0 8px; font-variant-numeric: tabular-nums; letter-spacing: -0.06em; font-size: clamp(3rem, 14vw, 4.7rem); font-weight: 800; line-height: 0.95; }
 .result-details { display: grid; gap: 7px; margin: 20px 0 0; color: var(--muted); font-size: 0.93rem; }
 .result-details p { margin: 0; }
+.result-completed-at { margin-bottom: 3px; font-size: 0.82rem; }
 .result-details .positive { color: var(--accent-dark); font-weight: 760; }
 .result-details .record-copy { color: var(--gold); font-weight: 760; }
 .result-modal .button-primary { width: 100%; margin-top: 25px; }
